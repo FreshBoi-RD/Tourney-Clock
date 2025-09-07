@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Poker Tournament Clock</title>
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <!-- Minimal Reset & Theme -->
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#111723; --muted:#1a2230; --text:#e6eefc; --sub:#9db0d1;
+      --accent:#4cc9f0; --accent2:#3a86ff; --warn:#ffb703; --danger:#ef476f; --ok:#06d6a0;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0b0f14 0%,#0a0d12 100%);color:var(--text)}
+    .wrap{display:grid;grid-template-columns: 1.25fr 1fr; gap:16px; padding:16px; max-width:1400px; margin:0 auto}
+    header{grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:linear-gradient(180deg,var(--panel),#0e1522); border:1px solid #1b2638; border-radius:16px; box-shadow:0 8px 30px rgba(0,0,0,.35)}
+    header h1{margin:0;font-weight:800;letter-spacing:.3px;font-size:22px}
+    header .brand{display:flex;gap:10px; align-items:center}
+    header .dot{width:10px;height:10px;border-radius:50%;background:var(--ok); box-shadow:0 0 10px var(--ok)}
+    header .controls{display:flex;gap:8px;flex-wrap:wrap}
+    button{appearance:none;border:none;border-radius:12px;padding:10px 14px;font-weight:700;color:#0b0f14;background:var(--accent);cursor:pointer;transition:.15s transform ease,.2s filter ease}
+    button.secondary{background:#233048;color:var(--text);border:1px solid #2f405d}
+    button.warn{background:var(--warn);color:#0b0f14}
+    button.danger{background:var(--danger)}
+    button:active{transform:translateY(1px)}
+    .grid{display:grid; gap:16px}
+    .card{background:linear-gradient(180deg,var(--panel),#0f1625); border:1px solid #1b2638; border-radius:18px; padding:16px; box-shadow:0 6px 24px rgba(0,0,0,.35)}
+    .timer{display:grid; grid-template-columns: 1.2fr .8fr; gap:16px}
+    .display{display:grid; grid-template-rows:auto 1fr auto; gap:12px}
+    .big{font-size:96px; font-weight:800; line-height:1; text-align:center; padding:12px 8px; border-radius:16px; background:radial-gradient(1200px 1200px at 50% -200px,#172134 20%,#0e1522 70%); border:1px solid #1e2b42; letter-spacing:1px}
+    .levels{display:grid; grid-template-columns: repeat(3,1fr); gap:12px}
+    .kpi{background:#0e1522;border:1px solid #1b2638;padding:12px;border-radius:14px;text-align:center}
+    .kpi h3{margin:0;font-size:12px;color:var(--sub);font-weight:600;letter-spacing:.3px}
+    .kpi .val{font-size:24px;font-weight:800;margin-top:6px}
+    .row{display:flex; align-items:center; justify-content:space-between; gap:12px}
+    .row .next{color:var(--sub)}
+    .blinds{font-weight:800;font-size:28px}
+    .muted{color:var(--sub)}
+
+    .editor{display:grid; grid-template-columns:1fr; gap:10px}
+    textarea{width:100%; min-height:180px; background:#0d1422; color:var(--text); border:1px solid #20304c; border-radius:12px; padding:12px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12.5px}
+    label{font-size:12px;color:var(--sub)}
+    input[type="number"], input[type="text"]{width:100%; padding:10px; border-radius:10px; border:1px solid #20304c; background:#0d1422; color:var(--text)}
+    table{width:100%; border-collapse:collapse; font-size:13px}
+    th,td{padding:8px 10px; border-bottom:1px solid #22324e}
+    th{color:var(--sub); font-weight:600; text-align:left}
+    tr:last-child td{border-bottom:none}
+    .pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#1a2232;color:#b7c6e6;font-size:12px;border:1px solid #283853}
+    .flex{display:flex; gap:8px; align-items:center}
+
+    .marquee{overflow:hidden; white-space:nowrap; border-top:1px dashed #263652; padding-top:8px; color:#aac2ea}
+    .marquee span{display:inline-block; padding-right:40px; animation:scroll 30s linear infinite}
+    @keyframes scroll{from{transform:translateX(100%)} to{transform:translateX(-100%)}}
+
+    @media (max-width: 980px){
+      .wrap{grid-template-columns:1fr}
+      .timer{grid-template-columns:1fr}
+      .big{font-size:64px}
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- React via CDN (no build step needed) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const {useEffect,useMemo,useRef,useState} = React;
+
+    // ---------- Utilities ----------
+    const fmtTime = (s)=>{
+      const m = Math.floor(s/60).toString().padStart(2,'0');
+      const r = Math.floor(s%60).toString().padStart(2,'0');
+      return `${m}:${r}`;
+    };
+    const playBeep = ()=>{
+      try{ new Audio('data:audio/wav;base64,UklGRmQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABYAaW1hZ2VwYXJhbQAA//8AAP//AACAgICAgP8AAP//AACAgICA').play(); }catch(e){}
+    };
+    const load = (key, fallback)=>{
+      try{ const v = localStorage.getItem(key); return v? JSON.parse(v) : fallback; }catch{ return fallback }
+    }
+    const save = (key, val)=>{ try{ localStorage.setItem(key, JSON.stringify(val)); }catch{} };
+
+    // ---------- Default Structure ----------
+    const defaultStructure = {
+      name: "Monthly NLH — 25K start, 20‑min levels",
+      levelSeconds: 20*60,
+      startingStack: 25000,
+      rebuyStack: 25000,
+      addonStack: 40000,
+      bigBlindAnteStartsAtLevel: 7, // after first break in this example
+      levels: [
+        { level:1, sb:100,  bb:200 },
+        { level:2, sb:200,  bb:400 },
+        { level:3, sb:300,  bb:600 },
+        { level:4, sb:400,  bb:800 },
+        { level:5, sb:600,  bb:1200 },
+        { level:6, sb:1000, bb:2000 },
+        { level:7, sb:1500, bb:3000, break:true, minutes:10 }, // BREAK (no blinds used)
+        { level:8, sb:2000, bb:4000 }, // BBA on from here
+        { level:9, sb:3000, bb:6000 },
+        { level:10,sb:4000, bb:8000 },
+        { level:11,sb:6000, bb:12000 },
+        { level:12,sb:10000,bb:20000 },
+        { level:13,sb:15000,bb:30000 },
+        { level:14,sb:20000,bb:40000 },
+      ]
+    };
+
+    // ---------- Main App ----------
+    function App(){
+      const [structureText, setStructureText] = useState(load('structureText', JSON.stringify(defaultStructure, null, 2)));
+      const [structure, setStructure] = useState(()=>load('structure', defaultStructure));
+      const [running, setRunning] = useState(false);
+      const [levelIndex, setLevelIndex] = useState(load('levelIndex', 0));
+      const [remaining, setRemaining] = useState(load('remaining', structure.levelSeconds));
+      const [chimeOn, setChimeOn] = useState(true);
+
+      // Registration & chips
+      const [players, setPlayers] = useState(()=>load('players', [])); // {id,name,entries,addons,out}
+      const [buyIn, setBuyIn] = useState(load('buyIn', 200));
+      const [fee, setFee] = useState(load('fee', 25));
+
+      // persist
+      useEffect(()=>save('structure', structure),[structure]);
+      useEffect(()=>save('structureText', structureText),[structureText]);
+      useEffect(()=>save('players', players),[players]);
+      useEffect(()=>save('buyIn', buyIn),[buyIn]);
+      useEffect(()=>save('fee', fee),[fee]);
+      useEffect(()=>save('levelIndex', levelIndex),[levelIndex]);
+      useEffect(()=>save('remaining', remaining),[remaining]);
+
+      // Timer
+      useEffect(()=>{
+        if(!running) return; 
+        const id = setInterval(()=>{
+          setRemaining((s)=>{
+            if(s>1) return s-1;
+            // time's up: advance level
+            handleAdvance();
+            return 0;
+          })
+        },1000);
+        return ()=>clearInterval(id);
+      },[running, levelIndex]);
+
+      const current = structure.levels[levelIndex] || null;
+      const next = structure.levels[levelIndex+1] || null;
+
+      const isBreak = current?.break === true;
+      const currentSeconds = isBreak ? (current.minutes??10)*60 : structure.levelSeconds;
+
+      // derive chips & averages
+      const totals = useMemo(()=>{
+        const entrants = players.filter(p=>p.entries>0).length;
+        const active = players.filter(p=>!p.out && p.entries>0).length;
+        const totalEntries = players.reduce((a,p)=>a+p.entries,0);
+        const totalAddons = players.reduce((a,p)=>a+p.addons,0);
+        const chips = (structure.startingStack * totalEntries) + (structure.addonStack * totalAddons);
+        const avg = active>0 ? Math.floor(chips/active) : 0;
+        const prizePool = (buyIn - fee) * totalEntries + (buyIn - fee) * totalAddons; // simple model
+        return {entrants, active, totalEntries, totalAddons, chips, avg, prizePool};
+      },[players, structure, buyIn, fee]);
+
+      function handleAdvance(){
+        if(chimeOn) playBeep();
+        const nextIndex = Math.min(levelIndex + 1, structure.levels.length - 1);
+        setLevelIndex(nextIndex);
+        const nextLvl = structure.levels[nextIndex];
+        const dur = nextLvl?.break ? (nextLvl.minutes??10)*60 : structure.levelSeconds;
+        setRemaining(dur);
+      }
+      function handleBack(){
+        const nextIndex = Math.max(levelIndex - 1, 0);
+        setLevelIndex(nextIndex);
+        const nextLvl = structure.levels[nextIndex];
+        const dur = nextLvl?.break ? (nextLvl.minutes??10)*60 : structure.levelSeconds;
+        setRemaining(dur);
+      }
+      function handleReset(){
+        setRunning(false);
+        setLevelIndex(0);
+        const dur = structure.levels[0]?.break ? (structure.levels[0].minutes??10)*60 : structure.levelSeconds;
+        setRemaining(dur);
+      }
+
+      // parse custom JSON
+      function applyStructure(){
+        try{
+          const obj = JSON.parse(structureText);
+          if(!obj.levels || !Array.isArray(obj.levels)) throw new Error('levels[] required');
+          setStructure(obj);
+          const dur = obj.levels[0]?.break ? (obj.levels[0].minutes??10)*60 : obj.levelSeconds;
+          setLevelIndex(0); setRemaining(dur); setRunning(false);
+        }catch(e){ alert('Invalid JSON: '+e.message); }
+      }
+
+      // keyboard shortcuts
+      useEffect(()=>{
+        const onKey = (e)=>{
+          if(e.code==='Space'){ e.preventDefault(); setRunning(x=>!x); }
+          if(e.key==='ArrowRight') handleAdvance();
+          if(e.key==='ArrowLeft') handleBack();
+          if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='r'){ e.preventDefault(); handleReset(); }
+        };
+        window.addEventListener('keydown', onKey);
+        return ()=>window.removeEventListener('keydown', onKey);
+      },[levelIndex, running]);
+
+      // helpers
+      const bbaOn = (structure.bigBlindAnteStartsAtLevel && current?.level >= structure.bigBlindAnteStartsAtLevel) && !isBreak;
+
+      function blindStr(l){
+        if(!l || l.break) return 'BREAK';
+        const ante = (structure.bigBlindAnteStartsAtLevel && l.level >= structure.bigBlindAnteStartsAtLevel) ? `, BBA ${fmtNum(l.bb)}`: '';
+        return `${fmtNum(l.sb)}/${fmtNum(l.bb)}${ante}`;
+      }
+      const fmtNum = (n)=> n?.toLocaleString?.() ?? n;
+
+      return (
+        <div className="wrap">
+          <header>
+            <div className="brand">
+              <div className="dot"/>
+              <h1>{structure.name}</h1>
+            </div>
+            <div className="controls">
+              <button onClick={()=>setRunning(r=>!r)}>{running? 'Pause' : 'Start'}</button>
+              <button className="secondary" onClick={handleBack}>Prev</button>
+              <button className="secondary" onClick={handleAdvance}>Next</button>
+              <button className="warn" onClick={()=>setRemaining(60)}>+60s</button>
+              <button className="warn" onClick={()=>setRemaining(s=>Math.max(0,s-60))}>-60s</button>
+              <button className="danger" onClick={handleReset}>Reset</button>
+              <label className="flex"><input type="checkbox" checked={chimeOn} onChange={e=>setChimeOn(e.target.checked)} />
+                <span className="pill">Chime on level change</span>
+              </label>
+            </div>
+          </header>
+
+          <section className="timer card">
+            <div className="display">
+              <div className="row">
+                <div>
+                  <div className="muted">Level</div>
+                  <div className="blinds">{current?.break? 'BREAK' : `L${current?.level || 1}`}</div>
+                </div>
+                <div className="row" style={{gap:16}}>
+                  <div>
+                    <div className="muted">Current</div>
+                    <div className="blinds">{blindStr(current)}</div>
+                  </div>
+                  <div>
+                    <div className="muted">Next</div>
+                    <div className="blinds">{blindStr(next)}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="big">{fmtTime(remaining)}</div>
+              <div className="levels">
+                <div className="kpi"><h3>Players In</h3><div className="val">{totals.active}</div></div>
+                <div className="kpi"><h3>Entrants</h3><div className="val">{totals.entrants}</div></div>
+                <div className="kpi"><h3>Avg Stack</h3><div className="val">{fmtNum(totals.avg)}</div></div>
+              </div>
+              <div className="marquee"><span>
+                Prize Pool (est.): ${fmtNum(totals.prizePool)} — Chips In Play: {fmtNum(totals.chips)} — Starting Stack: {fmtNum(structure.startingStack)} — Level Length: {isBreak? (current.minutes??10)+' min break' : (structure.levelSeconds/60)+' min'}
+              </span></div>
+            </div>
+
+            <div className="grid">
+              <div className="card" style={{padding:12}}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Lvl</th><th>Blinds</th><th>Ante</th><th>Len</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {structure.levels.map((l,i)=>{
+                      const active = i===levelIndex;
+                      const ante = (structure.bigBlindAnteStartsAtLevel && l.level >= structure.bigBlindAnteStartsAtLevel && !l.break) ? fmtNum(l.bb) : '-';
+                      const len = l.break? (l.minutes??10)+"m (Break)" : (structure.levelSeconds/60)+"m";
+                      return (
+                        <tr key={i} style={{background:active?'#142039':'transparent'}}>
+                          <td>{l.level}</td>
+                          <td>{l.break? '—' : `${fmtNum(l.sb)}/${fmtNum(l.bb)}`}</td>
+                          <td>{l.break? '—' : ante}</td>
+                          <td>{len}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="card editor">
+                <label>Blind Structure JSON (supports breaks with {`{ break:true, minutes:10 }`} and Big Blind Ante from a given level)</label>
+                <textarea value={structureText} onChange={e=>setStructureText(e.target.value)} spellCheck={false}/>
+                <div className="row">
+                  <button onClick={applyStructure}>Apply Structure</button>
+                  <button className="secondary" onClick={()=>{ setStructureText(JSON.stringify(defaultStructure,null,2)); }}>Load Example</button>
+                </div>
+                <div className="grid" style={{gridTemplateColumns:'repeat(2,1fr)'}}>
+                  <div>
+                    <label>Level Seconds</label>
+                    <input type="number" value={structure.levelSeconds} onChange={e=>setStructure(s=>({...s, levelSeconds:parseInt(e.target.value||0)}))} />
+                  </div>
+                  <div>
+                    <label>BBA Starts At Level</label>
+                    <input type="number" value={structure.bigBlindAnteStartsAtLevel||''} onChange={e=>setStructure(s=>({...s, bigBlindAnteStartsAtLevel: parseInt(e.target.value||0)}))} />
+                  </div>
+                  <div>
+                    <label>Starting Stack (chips)</label>
+                    <input type="number" value={structure.startingStack} onChange={e=>setStructure(s=>({...s, startingStack:parseInt(e.target.value||0)}))} />
+                  </div>
+                  <div>
+                    <label>Rebuy Stack (chips)</label>
+                    <input type="number" value={structure.rebuyStack} onChange={e=>setStructure(s=>({...s, rebuyStack:parseInt(e.target.value||0)}))} />
+                  </div>
+                  <div>
+                    <label>Add-on Stack (chips)</label>
+                    <input type="number" value={structure.addonStack} onChange={e=>setStructure(s=>({...s, addonStack:parseInt(e.target.value||0)}))} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="card">
+            <div className="row" style={{marginBottom:8}}>
+              <h2 style={{margin:0}}>Registration & Chip Tracking</h2>
+              <span className="pill">Buy‑in ${fmtNum(buyIn)} (Fee ${fmtNum(fee)})</span>
+            </div>
+            <div className="grid" style={{gridTemplateColumns:'2fr 1fr 1fr 1fr', alignItems:'end'}}>
+              <div>
+                <label>Player Name</label>
+                <input id="nameInput" type="text" placeholder="Add player..." />
+              </div>
+              <div>
+                <label>Buy‑in</label>
+                <input type="number" value={buyIn} onChange={e=>setBuyIn(parseInt(e.target.value||0))} />
+              </div>
+              <div>
+                <label>House Fee</label>
+                <input type="number" value={fee} onChange={e=>setFee(parseInt(e.target.value||0))} />
+              </div>
+              <div>
+                <button onClick={()=>{
+                  const inp = document.getElementById('nameInput');
+                  const name = (inp.value||'').trim(); if(!name) return;
+                  const id = Date.now()+Math.random();
+                  setPlayers(ps=>[...ps,{id,name,entries:1,addons:0,out:false}]);
+                  inp.value='';
+                }}>Add Player</button>
+              </div>
+            </div>
+
+            <div style={{marginTop:12}}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Entries</th>
+                    <th>Add‑ons</th>
+                    <th>Status</th>
+                    <th class="" style="text-align:right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {players.map(p=> (
+                    <tr key={p.id}>
+                      <td>{p.name}</td>
+                      <td>{p.entries}</td>
+                      <td>{p.addons}</td>
+                      <td>{p.out? <span className="pill" style={{background:'#331b23', borderColor:'#5b2a3a'}}>Out</span> : <span className="pill" style={{background:'#153226', borderColor:'#25593f'}}>In</span>}</td>
+                      <td style={{textAlign:'right'}}>
+                        <div className="flex" style={{justifyContent:'flex-end'}}>
+                          <button className="secondary" onClick={()=>setPlayers(ps=>ps.map(x=>x.id===p.id?{...x, entries:x.entries+1}:x))}>Rebuy</button>
+                          <button className="secondary" onClick={()=>setPlayers(ps=>ps.map(x=>x.id===p.id?{...x, addons:x.addons+1}:x))}>Add‑on</button>
+                          <button className="secondary" onClick={()=>setPlayers(ps=>ps.map(x=>x.id===p.id?{...x, out:!x.out}:x))}>{p.out? 'Re‑enter' : 'Bust'}</button>
+                          <button className="danger" onClick={()=>setPlayers(ps=>ps.filter(x=>x.id!==p.id))}>Remove</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid" style={{gridTemplateColumns:'repeat(5,1fr)', marginTop:12}}>
+              <div className="kpi"><h3>Total Entries</h3><div className="val">{totals.totalEntries}</div></div>
+              <div className="kpi"><h3>Add‑ons</h3><div className="val">{totals.totalAddons}</div></div>
+              <div className="kpi"><h3>Chips In Play</h3><div className="val">{fmtNum(totals.chips)}</div></div>
+              <div className="kpi"><h3>Players Remaining</h3><div className="val">{totals.active}</div></div>
+              <div className="kpi"><h3>Prize Pool (est.)</h3><div className="val">${fmtNum(totals.prizePool)}</div></div>
+            </div>
+          </section>
+
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('app'));
+    root.render(<App/>);
+  </script>
+</body>
+</html>
